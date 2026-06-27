@@ -648,6 +648,20 @@ bool SdioCard::begin(SdioConfig sdioConfig) {
   m_highCapacity = false;
   m_version2 = false;
 
+#if defined(ARDUINO_MIMXRT1060_EVKB)
+  // The MIMXRT1060-EVKB powers its microSD slot through a load switch on
+  // GPIO_AD_B1_03 (core pin 7); the Teensy boards have no such switch.  The
+  // NXP SDK enables card power by driving the pad LOW (BOARD_SDCardPowerControl
+  // (true) -> 0).  Power-cycle the card here so begin() works from a cold boot.
+  // (Note: pin 7 doubles as the EVKB SD power control.  This has no effect in
+  // QEMU, which has no card-power model -- verify the polarity on real hardware.)
+  pinMode(7, OUTPUT);
+  digitalWriteFast(7, HIGH);   // power off
+  delay(2);
+  digitalWriteFast(7, LOW);    // power on (SDK "enable" level)
+  delay(10);                   // allow the rail to settle
+#endif  // ARDUINO_MIMXRT1060_EVKB
+
   // initialize controller.
   initSDHC();
   if (!cardCommand(CMD0_XFERTYP, 0)) {
