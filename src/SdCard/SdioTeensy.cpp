@@ -22,7 +22,7 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
  * DEALINGS IN THE SOFTWARE.
  */
-#if defined(__MK64FX512__) || defined(__MK66FX1M0__) || defined(__IMXRT1062__)
+#if defined(__MK64FX512__) || defined(__MK66FX1M0__) || defined(__IMXRT1062__) || defined(__IMXRT1176__)
 #include "SdioTeensy.h"
 #include "SdCardInfo.h"
 #include "SdioCard.h"
@@ -97,7 +97,7 @@ const uint32_t DATA_WRITE_MULTI_DMA = DATA_WRITE_DMA | SDHC_XFERTYP_MSBSEL |
 const uint32_t DATA_WRITE_MULTI_PGM = SDHC_XFERTYP_DPSEL | SDHC_XFERTYP_MSBSEL |
                                       SDHC_XFERTYP_BCEN;
 
-#elif defined(__IMXRT1062__)
+#elif defined(__IMXRT1062__) || defined(__IMXRT1176__)
 // Use low bits for SDHC_MIX_CTRL since bits 15-0 of SDHC_XFERTYP are reserved.
 const uint32_t SDHC_MIX_CTRL_MASK = SDHC_MIX_CTRL_DMAEN | SDHC_MIX_CTRL_BCEN |
                                     SDHC_MIX_CTRL_AC12EN |
@@ -283,7 +283,7 @@ static void sdIrs() {
   SDHC_IRQSIGEN = 0;
   m_irqstat = SDHC_IRQSTAT;
   SDHC_IRQSTAT = m_irqstat;
-#if defined(__IMXRT1062__)
+#if defined(__IMXRT1062__) || defined(__IMXRT1176__)
   SDHC_MIX_CTRL &= ~(SDHC_MIX_CTRL_AC23EN | SDHC_MIX_CTRL_DMAEN);
 #endif
   m_dmaBusy = false;
@@ -370,6 +370,46 @@ static uint32_t baseClock() {
   uint32_t divider = ((CCM_CSCDR1 >> 11) & 0x7) + 1;
   return (528000000U * 3)/((CCM_ANALOG_PFD_528 & 0x3F)/6)/divider;
 }
+
+#elif defined(__IMXRT1176__)
+//------------------------------------------------------------------------------
+static void gpioMux(uint8_t mode) {
+  IOMUXC_SW_MUX_CTL_PAD_GPIO_SD_B1_00 = mode;  // USDHC1_CMD
+  IOMUXC_SW_MUX_CTL_PAD_GPIO_SD_B1_01 = mode;  // USDHC1_CLK
+  IOMUXC_SW_MUX_CTL_PAD_GPIO_SD_B1_02 = mode;  // USDHC1_DATA0
+  IOMUXC_SW_MUX_CTL_PAD_GPIO_SD_B1_03 = mode;  // USDHC1_DATA1
+  IOMUXC_SW_MUX_CTL_PAD_GPIO_SD_B1_04 = mode;  // USDHC1_DATA2
+  IOMUXC_SW_MUX_CTL_PAD_GPIO_SD_B1_05 = mode;  // USDHC1_DATA3
+}
+//------------------------------------------------------------------------------
+static void enableGPIO(bool enable) {
+  // RT1176 SW_PAD_CTL fields: bit4 ODE, bits[3:2] PULL (01=up,10=down,11=none),
+  // bit1 PDRV (0=high drive).  CMD/DATA = pull-up + high drive (0x04);
+  // CLK = pull-down + high drive (0x08).  (The 1062 PKE/DSE/SPEED/PUE encoding
+  // does not exist on the 1176.)
+  const uint32_t DATA_PAD = 0x04;
+  const uint32_t CLK_PAD  = 0x08;
+  if (enable) {
+    gpioMux(0);  // ALT0 = USDHC1
+    IOMUXC_SW_PAD_CTL_PAD_GPIO_SD_B1_00 = DATA_PAD;  // CMD
+    IOMUXC_SW_PAD_CTL_PAD_GPIO_SD_B1_01 = CLK_PAD;   // CLK
+    IOMUXC_SW_PAD_CTL_PAD_GPIO_SD_B1_02 = DATA_PAD;  // DATA0
+    IOMUXC_SW_PAD_CTL_PAD_GPIO_SD_B1_03 = DATA_PAD;  // DATA1
+    IOMUXC_SW_PAD_CTL_PAD_GPIO_SD_B1_04 = DATA_PAD;  // DATA2
+    IOMUXC_SW_PAD_CTL_PAD_GPIO_SD_B1_05 = DATA_PAD;  // DATA3
+  } else {
+    gpioMux(5);  // ALT5 = GPIO (idle during the clock switch)
+  }
+}
+//------------------------------------------------------------------------------
+static void initClock() {
+  // USDHC1 clock root (CLOCK_ROOT58) <- SYS_PLL2_PFD2 (mux 4) / 2 (DIV field 1)
+  // ~= 198 MHz.  Then ungate USDHC1 (LPCG117).
+  CCM_CLOCK_ROOT58_CONTROL = CCM_CLOCK_ROOT_CONTROL_MUX(4) | CCM_CLOCK_ROOT_CONTROL_DIV(1);
+  CCM_LPCG117_DIRECT = 1;
+}
+//------------------------------------------------------------------------------
+static uint32_t baseClock() { return 198000000U; }
 #endif  // defined(__MK64FX512__) || defined(__MK66FX1M0__)
 //==============================================================================
 // Static functions.
@@ -383,14 +423,14 @@ static bool cardCommand(uint32_t xfertyp, uint32_t arg) {
     return false;  // Caller will set errorCode.
   }
   SDHC_CMDARG = arg;
-#if defined(__IMXRT1062__)
+#if defined(__IMXRT1062__) || defined(__IMXRT1176__)
   // Set MIX_CTRL if data transfer.
   if (xfertyp & SDHC_XFERTYP_DPSEL) {
     SDHC_MIX_CTRL &= ~SDHC_MIX_CTRL_MASK;
     SDHC_MIX_CTRL |= xfertyp & SDHC_MIX_CTRL_MASK;
   }
   xfertyp &= ~SDHC_MIX_CTRL_MASK;
-#endif  // defined(__IMXRT1062__)
+#endif  // defined(__IMXRT1062__) || defined(__IMXRT1176__)
   SDHC_XFERTYP = xfertyp;
   if (waitTimeout(isBusyCommandComplete)) {
     return false;  // Caller will set errorCode.
@@ -431,9 +471,9 @@ static void initSDHC() {
   // Disable GPIO clock.
   enableGPIO(false);
 
-#if defined (__IMXRT1062__)
+#if defined (__IMXRT1062__) || defined(__IMXRT1176__)
   SDHC_MIX_CTRL |= 0x80000000;
-#endif  //  (__IMXRT1062__)
+#endif  //  (__IMXRT1062__) || (__IMXRT1176__)
 
   // Reset SDHC. Use default Water Mark Level of 16.
   SDHC_SYSCTL |= SDHC_SYSCTL_RSTA | SDHC_SYSCTL_SDCLKFS(0x80);
@@ -677,7 +717,7 @@ bool SdioCard::begin(SdioConfig sdioConfig) {
       break;
     }
   }
-#if defined(__IMXRT1062__)
+#if defined(__IMXRT1062__) || defined(__IMXRT1176__)
   // Old version 1 cards have trouble with Teensy 4.1 after CMD8.
   // For reasons unknown, SDIO stops working after the cards does
   // not reply.  Simply restarting and CMD0 is a crude workaround.
@@ -959,7 +999,7 @@ bool SdioCard::readStart(uint32_t sector) {
     return sdError(SD_CARD_ERROR_CMD13);
   }
   SDHC_PROCTL |= SDHC_PROCTL_SABGREQ;
-#if defined(__IMXRT1062__)
+#if defined(__IMXRT1062__) || defined(__IMXRT1176__)
   // Infinite transfer.
   SDHC_BLKATTR = SDHC_BLKATTR_BLKSIZE(512);
 #else  // defined(__IMXRT1062__)
@@ -1114,7 +1154,7 @@ bool SdioCard::writeStart(uint32_t sector) {
   }
   SDHC_PROCTL &= ~SDHC_PROCTL_SABGREQ;
 
-#if defined(__IMXRT1062__)
+#if defined(__IMXRT1062__) || defined(__IMXRT1176__)
   // Infinite transfer.
   SDHC_BLKATTR = SDHC_BLKATTR_BLKSIZE(512);
 #else  // defined(__IMXRT1062__)
@@ -1130,4 +1170,4 @@ bool SdioCard::writeStart(uint32_t sector) {
 bool SdioCard::writeStop() {
   return transferStop();
 }
-#endif  // defined(__MK64FX512__)  defined(__MK66FX1M0__) defined(__IMXRT1062__)
+#endif  // defined(__MK64FX512__)  defined(__MK66FX1M0__) defined(__IMXRT1062__) defined(__IMXRT1176__)

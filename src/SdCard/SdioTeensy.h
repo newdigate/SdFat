@@ -3,7 +3,7 @@
 
 // From Paul's SD.h driver.
 
-#if defined(__IMXRT1062__)
+#if defined(__IMXRT1062__) || defined(__IMXRT1176__)
 #define MAKE_REG_MASK(m,s) (((uint32_t)(((uint32_t)(m) << s))))
 #define MAKE_REG_GET(x,m,s) (((uint32_t)(((uint32_t)(x)>>s) & m)))
 #define MAKE_REG_SET(x,m,s) (((uint32_t)(((uint32_t)(x) & m) << s)))
@@ -254,7 +254,11 @@
 #define SDHC_MMCBOOT      (USDHC1_MMC_BOOT) // MMC Boot register
 #define SDHC_VENDOR2    (USDHC2_VEND_SPEC2) // Vendor Specific2 register
 //
+#if defined(__IMXRT1176__)
+#define IRQ_SDHC    IRQ_USDHC1
+#else
 #define IRQ_SDHC    IRQ_SDHC1
+#endif
 
 #define SDHC_MAX_DVS (0xF + 1U)
 #define SDHC_MAX_CLKFS (0xFF + 1U)
@@ -273,5 +277,5 @@
 #define IOMUXC_SW_PAD_CTL_PAD_PUS_MASK  ((0x3)<<14)
 #define IOMUXC_SW_PAD_CTL_PAD_DSE(n)    (((n)&0x7)<<3)
 #define IOMUXC_SW_PAD_CTL_PAD_DSE_MASK  ((0x7)<<3)
-#endif  // defined(__IMXRT1062__)
+#endif  // defined(__IMXRT1062__) || defined(__IMXRT1176__)
 #endif  // SdioTeensy_h
