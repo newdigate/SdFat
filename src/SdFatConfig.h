@@ -425,6 +425,15 @@ typedef uint8_t SdCsPin_t;
 /**
  * Determine the default SPI configuration.
  */
+// __IMXRT1176__ is excluded from the Teensy custom-SPI driver: the RT1176 SPI
+// port (newdigate/SPI, LPSPI1) implements transfer(tx,rx,count) as a DMA-only
+// operation with no fill-byte / null-buffer support, so it cannot satisfy the
+// custom driver (SdSpiTeensy3.cpp), which relies on setTransferWriteFill() and
+// transfer(nullptr,buf,count).  Fall through to SD_HAS_CUSTOM_SPI 0 so the SPI
+// backend uses SdFat's generic Arduino driver (SdSpiLibDriver.h), which needs
+// only the per-byte/array transfer the RT1176 port implements correctly.  (The
+// RT1176 uses SDIO/BUILTIN_SDCARD for its built-in slot; the SPI-SD path is
+// linked but unused, and this keeps that path buildable *and* correct.)
 #if defined(ARDUINO_ARCH_APOLLO3)\
   || (defined(__AVR__) && defined(SPDR) && defined(SPSR) && defined(SPIF))\
   || (defined(__AVR__) && defined(SPI0) && defined(SPI_RXCIF_bm))\
@@ -433,7 +442,7 @@ typedef uint8_t SdCsPin_t;
   || defined(ARDUINO_SAM_DUE)\
   || defined(STM32_CORE_VERSION)\
   || defined(__STM32F1__) || defined(__STM32F4__)\
-  || (defined(CORE_TEENSY) && defined(__arm__))
+  || (defined(CORE_TEENSY) && defined(__arm__) && !defined(__IMXRT1176__))
 #define SD_HAS_CUSTOM_SPI 1
 #else  // SD_HAS_CUSTOM_SPI
 // Use standard SPI library.
