@@ -405,10 +405,22 @@ static void enableGPIO(bool enable) {
 static void initClock() {
   // USDHC1 clock root (CLOCK_ROOT58) <- SYS_PLL2_PFD2 (mux 4) / 2 (DIV field 1)
   // ~= 198 MHz.  Then ungate USDHC1 (LPCG117).
+  //
+  // HARDWARE-VERIFY (QEMU cannot check clock frequency): this assumes the boot
+  // ROM leaves SYS_PLL2_PFD2 at ~396 MHz (the NXP BOARD_BootClockRUN value).
+  // The RT1176 core's startup.c brings up only the ARM PLL + AHB, not PLL2, so
+  // the SD identification (400 kHz) and run (25 MHz) clocks depend on that
+  // boot-ROM state.  If SD init fails on real hardware, measure the actual root
+  // frequency; if PFD2 differs, either program PLL2 PFD2 explicitly here or fall
+  // back to a boot-independent source -- e.g. OSC_24M: MUX(1)|DIV(0) with
+  // baseClock() returning 24000000U (guaranteed on, deterministic, caps the SD
+  // clock at 24 MHz which is ample for bring-up and WAV playback).
   CCM_CLOCK_ROOT58_CONTROL = CCM_CLOCK_ROOT_CONTROL_MUX(4) | CCM_CLOCK_ROOT_CONTROL_DIV(1);
   CCM_LPCG117_DIRECT = 1;
 }
 //------------------------------------------------------------------------------
+// Root frequency for setSdclk()'s divider math.  Must track initClock()'s
+// source: 198 MHz for SYS_PLL2_PFD2/2 (see the HARDWARE-VERIFY note above).
 static uint32_t baseClock() { return 198000000U; }
 #endif  // defined(__MK64FX512__) || defined(__MK66FX1M0__)
 //==============================================================================
