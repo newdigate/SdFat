@@ -51,7 +51,7 @@ import_arduino_library(cores ${EVKB}/cores/imxrt1176)
 # SDIO (BUILTIN_SDCARD); the SPI-SD path is linked but never executed.
 import_arduino_library(SdFat ${CMAKE_CURRENT_LIST_DIR}/../..
     src src/common src/SdCard src/FatLib src/ExFatLib src/FsLib
-    src/iostream src/DigitalIO src/SpiDriver)
+    src/iostream src/SpiDriver)
 import_arduino_library(SPI   $ENV{HOME}/Development/SPI)
 # SD wrapper (newdigate/SD, aka PaulS_SD): SDClass:public FS over SdFat.  It is a
 # 1.5-format library too (SD.cpp / SD.h under src/), so pass the `src` subdir so

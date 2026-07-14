@@ -86,9 +86,7 @@ inline bool spiOptionDedicated(uint8_t opt) {(void)opt; return false;}
 /** Port type for Arduino SPI hardware driver. */
 typedef SPIClass SpiPort_t;
 #elif SPI_DRIVER_SELECT == 2
-class SdSpiSoftDriver;
-/** Port type for software SPI driver. */
-typedef SdSpiSoftDriver SpiPort_t;
+#error "SPI_DRIVER_SELECT == 2 (software SPI) removed from this fork: GPL DigitalIO/SdSpiSoftDriver deleted (license clean-room 2026-07-13)"
 #elif SPI_DRIVER_SELECT == 3
 class SdSpiBaseClass;
 /** Port type for extrernal SPI driver. */
@@ -145,7 +143,7 @@ class SdSpiConfig {
 #if SPI_DRIVER_SELECT < 2
 #include "SdSpiArduinoDriver.h"
 #elif SPI_DRIVER_SELECT == 2
-#include "SdSpiSoftDriver.h"
+#error "SPI_DRIVER_SELECT == 2 (software SPI) removed from this fork: GPL DigitalIO/SdSpiSoftDriver deleted (license clean-room 2026-07-13)"
 #elif SPI_DRIVER_SELECT == 3
 #include "SdSpiBaseClass.h"
 typedef SdSpiBaseClass SdSpiDriver;
