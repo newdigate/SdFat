@@ -164,8 +164,8 @@
 #define SDHC_HTCAPBLT_DMAS      MAKE_REG_MASK(0x1,22) //
 #define SDHC_HTCAPBLT_HSS     MAKE_REG_MASK(0x1,21) //
 #define SDHC_HTCAPBLT_ADMAS     MAKE_REG_MASK(0x1,20) //
-#define SDHC_HTCAPBLT_MBL_VAL   MAKE_REG_GET((USDHC1_HOST_CTRL_CAP),0x7,16) //
-#define SDHC_HTCAPBLT_RETUN_MODE  MAKE_REG_GET((USDHC1_HOST_CTRL_CAP),0x3,14) //
+#define SDHC_HTCAPBLT_MBL_VAL   MAKE_REG_GET((SDHC_USDHC.HOST_CTRL_CAP),0x7,16) //
+#define SDHC_HTCAPBLT_RETUN_MODE  MAKE_REG_GET((SDHC_USDHC.HOST_CTRL_CAP),0x3,14) //
 #define SDHC_HTCAPBLT_TUNE_SDR50  MAKE_REG_MASK(0x1,13) //
 #define SDHC_HTCAPBLT_TIME_RETUN(n) MAKE_REG_SET(n,0xF,8) //
 
@@ -228,37 +228,49 @@
 #define CCM_ANALOG_PFD_528_PFD3_FRAC_MASK ((0x3f<<24)
 #define CCM_ANALOG_PFD_528_PFD3_FRAC(n) (((n)<<24) & CCM_ANALOG_PFD_528_PFD3_FRAC_MASK)
 
-#define SDHC_DSADDR       (USDHC1_DS_ADDR ) // DMA System Address register
-#define SDHC_BLKATTR      (USDHC1_BLK_ATT) // Block Attributes register
-#define SDHC_CMDARG       (USDHC1_CMD_ARG) // Command Argument register
-#define SDHC_XFERTYP      (USDHC1_CMD_XFR_TYP) // Transfer Type register
-#define SDHC_CMDRSP0      (USDHC1_CMD_RSP0) // Command Response 0
-#define SDHC_CMDRSP1      (USDHC1_CMD_RSP1) // Command Response 1
-#define SDHC_CMDRSP2      (USDHC1_CMD_RSP2) // Command Response 2
-#define SDHC_CMDRSP3      (USDHC1_CMD_RSP3) // Command Response 3
-#define SDHC_DATPORT      (USDHC1_DATA_BUFF_ACC_PORT) // Buffer Data Port register
-#define SDHC_PRSSTAT      (USDHC1_PRES_STATE) // Present State register
-#define SDHC_PROCTL       (USDHC1_PROT_CTRL) // Protocol Control register
-#define SDHC_SYSCTL       (USDHC1_SYS_CTRL) // System Control register
-#define SDHC_IRQSTAT      (USDHC1_INT_STATUS) // Interrupt Status register
-#define SDHC_IRQSTATEN      (USDHC1_INT_STATUS_EN) // Interrupt Status Enable register
-#define SDHC_IRQSIGEN     (USDHC1_INT_SIGNAL_EN) // Interrupt Signal Enable register
-#define SDHC_AC12ERR      (USDHC1_AUTOCMD12_ERR_STATUS) // Auto CMD12 Error Status Register
-#define SDHC_HTCAPBLT     (USDHC1_HOST_CTRL_CAP) // Host Controller Capabilities
-#define SDHC_WML        (USDHC1_WTMK_LVL) // Watermark Level Register
-#define SDHC_MIX_CTRL     (USDHC1_MIX_CTRL) // Mixer Control
-#define SDHC_FEVT       (USDHC1_FORCE_EVENT) // Force Event register
-#define SDHC_ADMAES       (USDHC1_ADMA_ERR_STATUS) // ADMA Error Status register
-#define SDHC_ADSADDR      (USDHC1_ADMA_SYS_ADDR) // ADMA System Addressregister
-#define SDHC_VENDOR       (USDHC1_VEND_SPEC) // Vendor Specific register
-#define SDHC_MMCBOOT      (USDHC1_MMC_BOOT) // MMC Boot register
-#define SDHC_VENDOR2    (USDHC2_VEND_SPEC2) // Vendor Specific2 register
-//
-#if defined(__IMXRT1176__)
+// Which USDHC instance drives the built-in slot.  Every SDHC_* register below
+// resolves through SDHC_USDHC, so the board choice lives in one place:
+//   Teensy 4.x / MIMXRT1060-EVKB: USDHC1 (GPIO_SD_B0)
+//   MIMXRT1170-EVKB (J15):        USDHC1 (GPIO_SD_B1, IRQ 133)
+//   Nosh (J5):                    USDHC2 (GPIO_SD_B2, IRQ 134) -- USDHC1 is the
+//                                 M.2 SDIO Wi-Fi slot there and must stay free.
+// The pad mux and clock root for each case live in SdioTeensy.cpp.
+#if defined(__IMXRT1176__) && defined(ARDUINO_NOSH)
+#define SDHC_USDHC  IMXRT_USDHC2
+#define IRQ_SDHC    IRQ_USDHC2
+#elif defined(__IMXRT1176__)
+#define SDHC_USDHC  IMXRT_USDHC1
 #define IRQ_SDHC    IRQ_USDHC1
 #else
+#define SDHC_USDHC  IMXRT_USDHC1
 #define IRQ_SDHC    IRQ_SDHC1
 #endif
+
+#define SDHC_DSADDR       (SDHC_USDHC.DS_ADDR) // DMA System Address register
+#define SDHC_BLKATTR      (SDHC_USDHC.BLK_ATT) // Block Attributes register
+#define SDHC_CMDARG       (SDHC_USDHC.CMD_ARG) // Command Argument register
+#define SDHC_XFERTYP      (SDHC_USDHC.CMD_XFR_TYP) // Transfer Type register
+#define SDHC_CMDRSP0      (SDHC_USDHC.CMD_RSP0) // Command Response 0
+#define SDHC_CMDRSP1      (SDHC_USDHC.CMD_RSP1) // Command Response 1
+#define SDHC_CMDRSP2      (SDHC_USDHC.CMD_RSP2) // Command Response 2
+#define SDHC_CMDRSP3      (SDHC_USDHC.CMD_RSP3) // Command Response 3
+#define SDHC_DATPORT      (SDHC_USDHC.DATA_BUFF_ACC_PORT) // Buffer Data Port register
+#define SDHC_PRSSTAT      (SDHC_USDHC.PRES_STATE) // Present State register
+#define SDHC_PROCTL       (SDHC_USDHC.PROT_CTRL) // Protocol Control register
+#define SDHC_SYSCTL       (SDHC_USDHC.SYS_CTRL) // System Control register
+#define SDHC_IRQSTAT      (SDHC_USDHC.INT_STATUS) // Interrupt Status register
+#define SDHC_IRQSTATEN      (SDHC_USDHC.INT_STATUS_EN) // Interrupt Status Enable register
+#define SDHC_IRQSIGEN     (SDHC_USDHC.INT_SIGNAL_EN) // Interrupt Signal Enable register
+#define SDHC_AC12ERR      (SDHC_USDHC.AUTOCMD12_ERR_STATUS) // Auto CMD12 Error Status Register
+#define SDHC_HTCAPBLT     (SDHC_USDHC.HOST_CTRL_CAP) // Host Controller Capabilities
+#define SDHC_WML        (SDHC_USDHC.WTMK_LVL) // Watermark Level Register
+#define SDHC_MIX_CTRL     (SDHC_USDHC.MIX_CTRL) // Mixer Control
+#define SDHC_FEVT       (SDHC_USDHC.FORCE_EVENT) // Force Event register
+#define SDHC_ADMAES       (SDHC_USDHC.ADMA_ERR_STATUS) // ADMA Error Status register
+#define SDHC_ADSADDR      (SDHC_USDHC.ADMA_SYS_ADDR) // ADMA System Addressregister
+#define SDHC_VENDOR       (SDHC_USDHC.VEND_SPEC) // Vendor Specific register
+#define SDHC_MMCBOOT      (SDHC_USDHC.MMC_BOOT) // MMC Boot register
+#define SDHC_VENDOR2    (SDHC_USDHC.VEND_SPEC2) // Vendor Specific2 register (was wrongly USDHC2_ on every board)
 
 #define SDHC_MAX_DVS (0xF + 1U)
 #define SDHC_MAX_CLKFS (0xFF + 1U)

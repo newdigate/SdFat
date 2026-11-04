@@ -373,13 +373,43 @@ static uint32_t baseClock() {
 
 #elif defined(__IMXRT1176__)
 //------------------------------------------------------------------------------
+// Pad set per board (the register macros in SdioTeensy.h pick the matching
+// USDHC instance and IRQ):
+//   MIMXRT1170-EVKB J15: USDHC1 on GPIO_SD_B1_00..05 = CMD, CLK, DATA0..3
+//   Nosh J5:             USDHC2 on GPIO_SD_B2_05/04/03/02/01/00 = CMD, CLK,
+//                        DATA0, DATA1, DATA2, DATA3 (NVCC_SD2 fixed 3.3 V,
+//                        so no VSELECT / UHS-I; card detect GPIO_AD_34 and
+//                        power enable GPIO_AD_35 are left to the SD wrapper)
+#if defined(ARDUINO_NOSH)
+#define SDHC_PAD_CMD   GPIO_SD_B2_05
+#define SDHC_PAD_CLK   GPIO_SD_B2_04
+#define SDHC_PAD_DATA0 GPIO_SD_B2_03
+#define SDHC_PAD_DATA1 GPIO_SD_B2_02
+#define SDHC_PAD_DATA2 GPIO_SD_B2_01
+#define SDHC_PAD_DATA3 GPIO_SD_B2_00
+#define SDHC_CLOCK_ROOT_CONTROL CCM_CLOCK_ROOT59_CONTROL  // USDHC2 root
+#define SDHC_LPCG_DIRECT        CCM_LPCG118_DIRECT        // USDHC2 gate
+#else
+#define SDHC_PAD_CMD   GPIO_SD_B1_00
+#define SDHC_PAD_CLK   GPIO_SD_B1_01
+#define SDHC_PAD_DATA0 GPIO_SD_B1_02
+#define SDHC_PAD_DATA1 GPIO_SD_B1_03
+#define SDHC_PAD_DATA2 GPIO_SD_B1_04
+#define SDHC_PAD_DATA3 GPIO_SD_B1_05
+#define SDHC_CLOCK_ROOT_CONTROL CCM_CLOCK_ROOT58_CONTROL  // USDHC1 root
+#define SDHC_LPCG_DIRECT        CCM_LPCG117_DIRECT        // USDHC1 gate
+#endif
+#define SDHC_CAT2_(a, b) a##b
+#define SDHC_MUX_CTL(pad) SDHC_CAT2_(IOMUXC_SW_MUX_CTL_PAD_, pad)
+#define SDHC_PAD_CTL(pad) SDHC_CAT2_(IOMUXC_SW_PAD_CTL_PAD_, pad)
+//------------------------------------------------------------------------------
 static void gpioMux(uint8_t mode) {
-  IOMUXC_SW_MUX_CTL_PAD_GPIO_SD_B1_00 = mode;  // USDHC1_CMD
-  IOMUXC_SW_MUX_CTL_PAD_GPIO_SD_B1_01 = mode;  // USDHC1_CLK
-  IOMUXC_SW_MUX_CTL_PAD_GPIO_SD_B1_02 = mode;  // USDHC1_DATA0
-  IOMUXC_SW_MUX_CTL_PAD_GPIO_SD_B1_03 = mode;  // USDHC1_DATA1
-  IOMUXC_SW_MUX_CTL_PAD_GPIO_SD_B1_04 = mode;  // USDHC1_DATA2
-  IOMUXC_SW_MUX_CTL_PAD_GPIO_SD_B1_05 = mode;  // USDHC1_DATA3
+  SDHC_MUX_CTL(SDHC_PAD_CMD)   = mode;
+  SDHC_MUX_CTL(SDHC_PAD_CLK)   = mode;
+  SDHC_MUX_CTL(SDHC_PAD_DATA0) = mode;
+  SDHC_MUX_CTL(SDHC_PAD_DATA1) = mode;
+  SDHC_MUX_CTL(SDHC_PAD_DATA2) = mode;
+  SDHC_MUX_CTL(SDHC_PAD_DATA3) = mode;
 }
 //------------------------------------------------------------------------------
 static void enableGPIO(bool enable) {
@@ -390,21 +420,22 @@ static void enableGPIO(bool enable) {
   const uint32_t DATA_PAD = 0x04;
   const uint32_t CLK_PAD  = 0x08;
   if (enable) {
-    gpioMux(0);  // ALT0 = USDHC1
-    IOMUXC_SW_PAD_CTL_PAD_GPIO_SD_B1_00 = DATA_PAD;  // CMD
-    IOMUXC_SW_PAD_CTL_PAD_GPIO_SD_B1_01 = CLK_PAD;   // CLK
-    IOMUXC_SW_PAD_CTL_PAD_GPIO_SD_B1_02 = DATA_PAD;  // DATA0
-    IOMUXC_SW_PAD_CTL_PAD_GPIO_SD_B1_03 = DATA_PAD;  // DATA1
-    IOMUXC_SW_PAD_CTL_PAD_GPIO_SD_B1_04 = DATA_PAD;  // DATA2
-    IOMUXC_SW_PAD_CTL_PAD_GPIO_SD_B1_05 = DATA_PAD;  // DATA3
+    gpioMux(0);  // ALT0 = USDHCn on both SD_B1 and SD_B2
+    SDHC_PAD_CTL(SDHC_PAD_CMD)   = DATA_PAD;
+    SDHC_PAD_CTL(SDHC_PAD_CLK)   = CLK_PAD;
+    SDHC_PAD_CTL(SDHC_PAD_DATA0) = DATA_PAD;
+    SDHC_PAD_CTL(SDHC_PAD_DATA1) = DATA_PAD;
+    SDHC_PAD_CTL(SDHC_PAD_DATA2) = DATA_PAD;
+    SDHC_PAD_CTL(SDHC_PAD_DATA3) = DATA_PAD;
   } else {
     gpioMux(5);  // ALT5 = GPIO (idle during the clock switch)
   }
 }
 //------------------------------------------------------------------------------
 static void initClock() {
-  // USDHC1 clock root (CLOCK_ROOT58) <- SYS_PLL2_PFD2 (mux 4) / 2 (DIV field 1)
-  // ~= 198 MHz.  Then ungate USDHC1 (LPCG117).
+  // USDHC clock root (CLOCK_ROOT58 for USDHC1, ROOT59 for USDHC2) <-
+  // SYS_PLL2_PFD2 (mux 4) / 2 (DIV field 1) ~= 198 MHz.  Then ungate the
+  // instance (LPCG117 / LPCG118).
   //
   // HARDWARE-VERIFY (QEMU cannot check clock frequency): this assumes the boot
   // ROM leaves SYS_PLL2_PFD2 at ~396 MHz (the NXP BOARD_BootClockRUN value).
@@ -415,8 +446,8 @@ static void initClock() {
   // back to a boot-independent source -- e.g. OSC_24M: MUX(1)|DIV(0) with
   // baseClock() returning 24000000U (guaranteed on, deterministic, caps the SD
   // clock at 24 MHz which is ample for bring-up and WAV playback).
-  CCM_CLOCK_ROOT58_CONTROL = CCM_CLOCK_ROOT_CONTROL_MUX(4) | CCM_CLOCK_ROOT_CONTROL_DIV(1);
-  CCM_LPCG117_DIRECT = 1;
+  SDHC_CLOCK_ROOT_CONTROL = CCM_CLOCK_ROOT_CONTROL_MUX(4) | CCM_CLOCK_ROOT_CONTROL_DIV(1);
+  SDHC_LPCG_DIRECT = 1;
 }
 //------------------------------------------------------------------------------
 // Root frequency for setSdclk()'s divider math.  Must track initClock()'s
